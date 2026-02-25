@@ -272,6 +272,19 @@
             margin-bottom: 5px;
             font-weight: bold;
         }
+
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #94a3b8;
+            margin-top: 5px;
+        }
+        .remember-me input {
+            width: auto;
+            margin: 0;
+        }
     </style>
 </head>
 <body>
@@ -288,6 +301,12 @@
     <p style="text-align:center; color:#94a3b8">The Ultimate Crash Predictor Game</p>
     <input type="number" id="phone" placeholder="M-Pesa Phone Number (07...)">
     <input type="password" id="password" placeholder="Password">
+    
+    <div class="remember-me">
+        <input type="checkbox" id="remember-check">
+        <label for="remember-check">Remember My Login</label>
+    </div>
+
     <div id="reg-extra-fields" style="display: none;">
         <p style="font-size: 12px; color: var(--accent); margin: 5px 0;">Security: Enter Birth Year (for recovery)</p>
         <input type="number" id="recovery-year" placeholder="Year of Birth (e.g. 1998)">
@@ -408,20 +427,33 @@
     let isCrashed = false;
     let currentBet = 0;
     let betQueued = false;
-    let nextCrashPoint = 0;
+    let nextCrashPoint = (1.1 + Math.random() * 3.9).toFixed(2); // Pre-determined crash point
     let authMode = 'login';
     let predictorUnlocked = false;
-    let gameStatus = "waiting"; // waiting, running, crashed
+    let gameStatus = "waiting"; 
 
     const names = ["0722***456", "0790***112", "0110***884", "0745***902", "0701***334", "0756***001", "0788***552"];
     
+    // Auto-login logic
+    window.onload = function() {
+        const savedUser = localStorage.getItem('remembered_user');
+        if (savedUser) {
+            currentUser = savedUser;
+            document.getElementById('auth-sec').style.display = 'none';
+            document.getElementById('main-nav').style.display = 'flex';
+            document.getElementById('user-name').innerText = currentUser;
+            showSection('game-sec');
+            startIntervalCycle();
+        }
+    };
+
     function unlockPredictor() {
         const pin = document.getElementById('predictor-pin').value;
         if(pin === "2345") {
             predictorUnlocked = true;
             document.getElementById('predictor-lock-screen').style.display = 'none';
             document.getElementById('predictor-content').style.display = 'block';
-            updatePredictor();
+            updatePredictorUI();
         } else {
             alert("Incorrect Predictor PIN");
         }
@@ -478,13 +510,14 @@
             updateUI();
             generateParticipants();
             document.getElementById('predictor-ui').style.display = 'block';
-            if(nextCrashPoint === 0 && predictorUnlocked) updatePredictor();
+            updatePredictorUI();
         }
     }
 
     function handleAuth() {
         const ph = document.getElementById('phone').value.trim();
         const p = document.getElementById('password').value.trim();
+        const remember = document.getElementById('remember-check').checked;
 
         if(!ph || !p) return alert("Fill all fields");
 
@@ -507,13 +540,13 @@
             const data = JSON.parse(localStorage.getItem(ph));
             if(data && data.password === p) {
                 currentUser = ph;
-                document.getElementById('auth-sec').style.display = 'none';
-                document.getElementById('auth-sec').classList.remove('active');
+                if(remember) localStorage.setItem('remembered_user', ph);
                 
+                document.getElementById('auth-sec').style.display = 'none';
                 document.getElementById('main-nav').style.display = 'flex';
                 document.getElementById('user-name').innerText = ph;
                 showSection('game-sec');
-                startIntervalCycle(); // Start the 10-second game loop
+                startIntervalCycle(); 
             } else {
                 alert("Wrong phone number or password");
             }
@@ -540,17 +573,16 @@
         }
     }
 
-    function updatePredictor() {
+    // Predictor UI update matches current crash point
+    function updatePredictorUI() {
         if(!predictorUnlocked) return;
         const status = document.getElementById('pred-status');
         const val = document.getElementById('next-prediction');
-        status.innerText = "CALCULATING...";
-        val.innerText = "Scanning Server...";
-        nextCrashPoint = parseFloat((1.1 + Math.random() * 3.9).toFixed(2));
+        status.innerText = "SYNCHRONIZING...";
+        val.innerText = "Next Crash @ " + nextCrashPoint + "x";
         setTimeout(() => {
             status.innerText = "PREDICTION READY";
-            val.innerText = "Next Crash @ " + nextCrashPoint.toFixed(2) + "x";
-        }, 1500);
+        }, 800);
     }
 
     function showInstructions() {
@@ -586,12 +618,14 @@
         }, 15000); 
     }
 
-    // --- INTERVAL SYSTEM LOGIC ---
-
     function startIntervalCycle() {
         let count = 8;
         const timerText = document.getElementById('game-timer-status');
         
+        // Generate the crash point for the NEXT round during waiting phase
+        nextCrashPoint = (1.1 + Math.random() * 3.9).toFixed(2);
+        updatePredictorUI();
+
         const countdown = setInterval(() => {
             if(gameStatus === "waiting") {
                 timerText.innerText = `NEXT ROUND IN ${count}s...`;
@@ -656,7 +690,7 @@
             let y = Math.max((currentMultiplier - 1) * -40, -180);
             document.getElementById('plane').style.transform = `translate(${x}px, ${y}px)`;
 
-            if(currentMultiplier >= nextCrashPoint) crash();
+            if(currentMultiplier >= parseFloat(nextCrashPoint)) crash();
         }, 100);
         updateUI();
     }
@@ -678,10 +712,8 @@
         
         betQueued = false;
         currentBet = 0;
-        updatePredictor();
         updateUI();
 
-        // After crash, wait 4 seconds then restart the waiting cycle
         setTimeout(() => {
             gameStatus = "waiting";
             document.getElementById('start-btn').style.display = 'block';
@@ -737,6 +769,7 @@
     }
 
     function logout() {
+        localStorage.removeItem('remembered_user');
         location.reload();
     }
 
