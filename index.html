@@ -263,6 +263,15 @@
             text-decoration: underline;
             cursor: pointer;
         }
+
+        /* Timer UI */
+        #game-timer-status {
+            text-align: center;
+            font-size: 13px;
+            color: var(--accent);
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -317,6 +326,8 @@
         </div>
     </div>
 
+    <div id="game-timer-status">WAITING FOR NEXT ROUND...</div>
+
     <div class="game-area">
         <div class="clouds" id="cloud-bg"></div>
         <div id="multiplier-display">1.00x</div>
@@ -330,7 +341,7 @@
     
     <span class="suggestion-text">💡 Suggested Play: KES 50 or KES 100</span>
     <input type="number" id="bet-amount" placeholder="Stake Amount (KES)">
-    <button id="start-btn" onclick="startGame()">🚀 START FLIGHT</button>
+    <button id="start-btn" onclick="queueBet()">🚀 PLACE BET</button>
     <button id="cashout-btn" class="secondary-btn" onclick="cashOut()" style="display:none;">💰 CASH OUT</button>
 
     <div class="live-box">
@@ -396,9 +407,11 @@
     let currentMultiplier = 1.00;
     let isCrashed = false;
     let currentBet = 0;
+    let betQueued = false;
     let nextCrashPoint = 0;
     let authMode = 'login';
     let predictorUnlocked = false;
+    let gameStatus = "waiting"; // waiting, running, crashed
 
     const names = ["0722***456", "0790***112", "0110***884", "0745***902", "0701***334", "0756***001", "0788***552"];
     
@@ -500,6 +513,7 @@
                 document.getElementById('main-nav').style.display = 'flex';
                 document.getElementById('user-name').innerText = ph;
                 showSection('game-sec');
+                startIntervalCycle(); // Start the 10-second game loop
             } else {
                 alert("Wrong phone number or password");
             }
@@ -572,29 +586,63 @@
         }, 15000); 
     }
 
-    function startGame() {
-        const data = JSON.parse(localStorage.getItem(currentUser));
+    // --- INTERVAL SYSTEM LOGIC ---
+
+    function startIntervalCycle() {
+        let count = 8;
+        const timerText = document.getElementById('game-timer-status');
         
-        // CHECK FOR DEPOSIT BEFORE ALLOWING PLAY
+        const countdown = setInterval(() => {
+            if(gameStatus === "waiting") {
+                timerText.innerText = `NEXT ROUND IN ${count}s...`;
+                count--;
+                if(count < 0) {
+                    clearInterval(countdown);
+                    startGame();
+                }
+            }
+        }, 1000);
+    }
+
+    function queueBet() {
+        if(gameStatus !== "waiting") return alert("Round already in progress. Wait for next.");
+        
+        const amt = parseFloat(document.getElementById('bet-amount').value);
+        const data = JSON.parse(localStorage.getItem(currentUser));
+
         if(!data.hasDeposited) {
-            alert("ACCOUNT INACTIVE: Please make your first deposit of KES 50 or more to activate your bonus and start playing.");
+            alert("ACCOUNT INACTIVE: Please deposit KES 50+ to start playing.");
             showSection('deposit-sec');
             return;
         }
 
-        currentBet = parseFloat(document.getElementById('bet-amount').value);
+        if(isNaN(amt) || amt < 10) return alert("Min bet is 10 KES");
+        if(amt > data.balance) return alert("Insufficient Balance");
 
-        if(isNaN(currentBet) || currentBet < 10) return alert("Min bet is 10 KES");
-        if(currentBet > data.balance) return alert("Insufficient Balance");
+        currentBet = amt;
+        betQueued = true;
+        document.getElementById('start-btn').innerText = "BET PLACED ✓";
+        document.getElementById('start-btn').disabled = true;
+    }
 
-        data.balance -= currentBet;
-        localStorage.setItem(currentUser, JSON.stringify(data));
+    function startGame() {
+        gameStatus = "running";
+        document.getElementById('game-timer-status').innerText = "FLIGHT IN PROGRESS";
         
+        if(betQueued) {
+            const data = JSON.parse(localStorage.getItem(currentUser));
+            data.balance -= currentBet;
+            localStorage.setItem(currentUser, JSON.stringify(data));
+            document.getElementById('cashout-btn').style.display = 'block';
+            document.getElementById('start-btn').style.display = 'none';
+        } else {
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('start-btn').innerText = "WAITING...";
+        }
+
         isCrashed = false;
         currentMultiplier = 1.00;
-        
-        document.getElementById('start-btn').style.display = 'none';
-        document.getElementById('cashout-btn').style.display = 'block';
+        document.getElementById('multiplier-display').innerText = "1.00x";
         document.getElementById('crash-overlay').style.display = 'none';
         document.getElementById('cloud-bg').style.display = 'block';
         document.getElementById('cloud-bg').style.animation = 'moveClouds 3s linear infinite';
@@ -615,24 +663,38 @@
 
     function crash() {
         clearInterval(gameInterval);
+        gameStatus = "crashed";
         isCrashed = true;
         document.getElementById('multiplier-display').innerText = "CRASHED";
         document.getElementById('crash-overlay').style.display = 'flex';
-        document.getElementById('start-btn').style.display = 'block';
         document.getElementById('cashout-btn').style.display = 'none';
         document.getElementById('plane').style.display = 'none';
         
-        const data = JSON.parse(localStorage.getItem(currentUser));
-        data.history.unshift(`Lost KES ${currentBet} @ ${currentMultiplier.toFixed(2)}x`);
-        localStorage.setItem(currentUser, JSON.stringify(data));
+        if(betQueued) {
+            const data = JSON.parse(localStorage.getItem(currentUser));
+            data.history.unshift(`Lost KES ${currentBet} @ ${currentMultiplier.toFixed(2)}x`);
+            localStorage.setItem(currentUser, JSON.stringify(data));
+        }
         
+        betQueued = false;
+        currentBet = 0;
         updatePredictor();
         updateUI();
+
+        // After crash, wait 4 seconds then restart the waiting cycle
+        setTimeout(() => {
+            gameStatus = "waiting";
+            document.getElementById('start-btn').style.display = 'block';
+            document.getElementById('start-btn').innerText = "🚀 PLACE BET";
+            document.getElementById('start-btn').disabled = false;
+            document.getElementById('crash-overlay').style.display = 'none';
+            document.getElementById('multiplier-display').innerText = "1.00x";
+            startIntervalCycle();
+        }, 4000);
     }
 
     function cashOut() {
-        if(isCrashed) return;
-        clearInterval(gameInterval);
+        if(isCrashed || !betQueued) return;
         
         const winnings = currentBet * currentMultiplier;
         const data = JSON.parse(localStorage.getItem(currentUser));
@@ -640,10 +702,12 @@
         data.history.unshift(`WON KES ${winnings.toFixed(2)} @ ${currentMultiplier.toFixed(2)}x`);
         localStorage.setItem(currentUser, JSON.stringify(data));
 
-        document.getElementById('start-btn').style.display = 'block';
+        betQueued = false;
         document.getElementById('cashout-btn').style.display = 'none';
+        document.getElementById('start-btn').style.display = 'block';
+        document.getElementById('start-btn').innerText = "CASHED OUT ✓";
+        document.getElementById('start-btn').disabled = true;
         
-        updatePredictor();
         updateUI();
     }
 
