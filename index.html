@@ -427,14 +427,23 @@
     let isCrashed = false;
     let currentBet = 0;
     let betQueued = false;
-    let nextCrashPoint = (1.1 + Math.random() * 3.9).toFixed(2); // Pre-determined crash point
+    let nextCrashPoint = 1.50; 
     let authMode = 'login';
     let predictorUnlocked = false;
     let gameStatus = "waiting"; 
 
     const names = ["0722***456", "0790***112", "0110***884", "0745***902", "0701***334", "0756***001", "0788***552"];
     
-    // Auto-login logic
+    // SYNC LOGIC: Generate a pseudo-random number based on the current minute/round
+    function getSyncedCrashPoint() {
+        const now = new Date();
+        // Use the current minute and the floor of 15-second intervals to sync
+        const seedValue = now.getMinutes() + (Math.floor(now.getSeconds() / 15) * 100);
+        // Simple seeded LCG-like math to ensure all devices get the same result
+        const pseudoRandom = (Math.sin(seedValue) * 10000) - Math.floor(Math.sin(seedValue) * 10000);
+        return (1.1 + pseudoRandom * 3.9).toFixed(2);
+    }
+
     window.onload = function() {
         const savedUser = localStorage.getItem('remembered_user');
         if (savedUser) {
@@ -573,7 +582,6 @@
         }
     }
 
-    // Predictor UI update matches current crash point
     function updatePredictorUI() {
         if(!predictorUnlocked) return;
         const status = document.getElementById('pred-status');
@@ -619,18 +627,21 @@
     }
 
     function startIntervalCycle() {
-        let count = 8;
         const timerText = document.getElementById('game-timer-status');
         
-        // Generate the crash point for the NEXT round during waiting phase
-        nextCrashPoint = (1.1 + Math.random() * 3.9).toFixed(2);
+        // Sync crash point with time
+        nextCrashPoint = getSyncedCrashPoint();
         updatePredictorUI();
+
+        // Calculate time until next 15-second window to sync clocks
+        const now = new Date();
+        let secondsRemaining = 15 - (now.getSeconds() % 15);
 
         const countdown = setInterval(() => {
             if(gameStatus === "waiting") {
-                timerText.innerText = `NEXT ROUND IN ${count}s...`;
-                count--;
-                if(count < 0) {
+                timerText.innerText = `NEXT ROUND IN ${secondsRemaining}s...`;
+                secondsRemaining--;
+                if(secondsRemaining < 0) {
                     clearInterval(countdown);
                     startGame();
                 }
