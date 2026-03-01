@@ -382,9 +382,7 @@
         <label>Enter Amount to Deposit (KES):</label>
         <span class="suggestion-text">🎁 PROMO: 100% Bonus on your First Deposit!</span>
         <input type="number" id="dep-amount" placeholder="Min 50 KES">
-        <button onclick="initiateStkPush()">Pay via M-Pesa (STK Push)</button>
-        <p style="text-align: center; font-size: 12px; color: #94a3b8; margin-top: 10px;">Or manual payment below</p>
-        <button class="secondary-btn" onclick="showInstructions()">View Till Number</button>
+        <button class="primary-btn" onclick="showInstructions()">Pay via M-Pesa Till</button>
     </div>
 
     <div id="payment-instructions" class="payment-card">
@@ -423,12 +421,6 @@
 </div>
 
 <script>
-    // --- DARAJA API CONFIGURATION ---
-    const CONSUMER_KEY = "xtxHzvCD1bi5GRD640J7QvsOjE0IDICGO9tN5eJjIvTqQddV";
-    const CONSUMER_SECRET = "NQeaRXxviiiRHQd7OAJ9QnLMHtoMrGP5Qhlp6lPyzpmKl3nb7UfH3SwJMZ6TDKvc";
-    const BUSINESS_SHORT_CODE = "3238647"; 
-    const PASSKEY = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"; 
-
     let currentUser = null;
     let gameInterval = null;
     let currentMultiplier = 1.00;
@@ -443,29 +435,11 @@
     const names = ["0722***456", "0790***112", "0110***884", "0745***902", "0701***334", "0756***001", "0788***552"];
     
     window.onload = function() {
-        // RESET LOGINS ON LOAD: Clear remembered user and redirect to login
         localStorage.removeItem('remembered_user');
         currentUser = null;
         showSection('auth-sec');
         document.getElementById('main-nav').style.display = 'none';
     };
-
-    async function initiateStkPush() {
-        const amount = document.getElementById('dep-amount').value;
-        if (!amount || amount < 50) return alert("Minimum deposit is KES 50");
-        const phoneNumber = currentUser;
-        if (!phoneNumber) return alert("Please log in first");
-        let formattedPhone = phoneNumber.replace(/^0/, "254");
-        document.getElementById('deposit-input-area').style.display = 'none';
-        document.getElementById('verifying-pay').style.display = 'block';
-        document.getElementById('verify-text').innerText = "Requesting M-Pesa STK Push...";
-        setTimeout(() => {
-            document.getElementById('verify-text').innerText = "STK Push Sent! Enter PIN on phone...";
-            setTimeout(() => {
-                finalizePayment(parseFloat(amount));
-            }, 10000);
-        }, 2000);
-    }
 
     function finalizePayment(amt) {
         const data = JSON.parse(localStorage.getItem(currentUser));
@@ -770,7 +744,6 @@
     }
 
     function logout() {
-        // PERMANENT RESET ON LOGOUT: Clears all browser memory for this app
         localStorage.clear();
         location.reload();
     }
